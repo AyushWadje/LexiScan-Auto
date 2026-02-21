@@ -1,0 +1,11 @@
+OCR CONFIDENCE ANALYSIS
+======================================================================
+
+Page 1:
+  Total words: 406
+  Average confidence: 37.0%
+  Confidence distribution:
+    80-100%: 59
+    50-79%: 93
+    <50%: 254
+

@@ -1,0 +1,325 @@
+# Zone-Based Extraction & hOCR - Quick Reference
+
+## Command Syntax
+
+### Zones Mode
+Extract text from document regions
+```bash
+python F.py "document.pdf" --mode zones
+```
+
+Shows:
+- Words per zone (header, title, body, footer)
+- Average confidence per zone
+- Sample text from each zone
+
+### hOCR Mode
+Generate HTML with layout preservation
+```bash
+python F.py "document.pdf" --mode hocr --output hocr_dir/
+```
+
+Creates:
+- `hocr_dir/page_1.hocr` - Layout-aware HTML with coordinates
+- Can be opened in browser or parsed by tools
+
+---
+
+## Zone Definitions (300 DPI, A4 page)
+
+```
+create_standard_zones() returns:
+
+'header'       → Top 8% (y: 0-208)
+'title'        → 8-20% (y: 208-520)
+'top_right'    → Right 40%, Top 15% (x: 1200-2000, y: 0-390)
+'body'         → Main content 20-85% (y: 520-2210)
+'footer'       → Bottom 15% (y: 2210-2600)
+'left_margin'  → Left 10% (x: 0-200)
+'right_margin' → Right 10% (x: 1800-2000)
+```
+
+---
+
+## Python Examples
+
+### Extract Zone Text
+```python
+from F import process_pdf_spatial, create_standard_zones, get_zone_text
+
+spatial = process_pdf_spatial("doc.pdf")
+
+for page_num, df in spatial.items():
+    zones = create_standard_zones()
+    
+    # Get text from zone with min confidence filter
+    header = get_zone_text(df, zones['header'], min_confidence=80)
+    footer = get_zone_text(df, zones['footer'], min_confidence=60)
+    
+    print(f"Header:\n{header}\n")
+    print(f"Footer:\n{footer}\n")
+```
+
+### Custom Zone
+```python
+from F import DocumentZone, extract_zone
+
+# Define rectangle
+custom_zone = DocumentZone(
+    name='My Zone',
+    x_min=100,    # Left edge
+    x_max=1000,   # Right edge
+    y_min=300,    # Top edge
+    y_max=800     # Bottom edge
+)
+
+# Extract words in zone
+zone_df = extract_zone(df, custom_zone)
+words = zone_df['text'].tolist()
+```
+
+### Analyze All Zones
+```python
+from F import process_pdf_spatial, analyze_document_structure
+
+spatial = process_pdf_spatial("doc.pdf")
+
+for page_num, df in spatial.items():
+    stats = analyze_document_structure(df)
+    
+    for zone_name, info in stats.items():
+        print(f"{zone_name}:")
+        print(f"  Words: {info['word_count']}")
+        print(f"  Confidence: {info['avg_confidence']:.0f}%")
+        print(f"  Sample: {info['words']}")
+```
+
+### Generate hOCR
+```python
+from F import process_pdf_spatial, save_hocr
+
+spatial = process_pdf_spatial("doc.pdf")
+save_hocr(spatial, output_path="hocr_output")
+
+# Creates:
+# hocr_output/page_1.hocr
+# hocr_output/page_2.hocr
+# etc.
+```
+
+### Parse hOCR
+```python
+from lxml import etree
+
+# Load hOCR
+tree = etree.parse("page_1.hocr")
+root = tree.getroot()
+
+# Find all words (namespace: http://www.w3.org/1999/xhtml)
+ns = {'h': 'http://www.w3.org/1999/xhtml'}
+words = root.findall(".//h:span[@class='ocrx_word']", ns)
+
+for word in words:
+    text = word.text
+    title = word.get('title')
+    # title = "bbox 850 154 1068 197; x_size 43; x_conf 85"
+    
+    # Extract bbox
+    bbox = title.split(';')[0].replace('bbox ', '')
+    left, top, right, bottom = map(int, bbox.split())
+    
+    print(f"'{text}' at ({left}, {top})")
+```
+
+---
+
+## Real-World Scenarios
+
+### Scenario 1: Extract Contract Signature Block
+```python
+from F import DocumentZone, extract_zone
+
+# Define signature area (bottom-right, typical location)
+sig_zone = DocumentZone(
+    'Signature',
+    x_min=1300,
+    x_max=2000,
+    y_min=2300,
+    y_max=2600
+)
+
+# Get signature region
+sig_words = extract_zone(df, sig_zone)
+
+# Look for date
+dates = sig_words[sig_words['text'].str.contains(r'\d{1,2}/\d{1,2}/\d{4}')]
+print(f"Signature dates found: {dates['text'].tolist()}")
+```
+
+### Scenario 2: Extract Invoice Data
+```python
+# Header (company name, invoice number)
+header = get_zone_text(df, zones['header'], min_confidence=85)
+
+# Top-right (issue date, due date)
+top_right = get_zone_text(df, zones['top_right'], min_confidence=80)
+
+# Body (line items)
+body = get_zone_text(df, zones['body'], min_confidence=70)
+
+# Footer (total, payment terms)
+footer = get_zone_text(df, zones['footer'], min_confidence=85)
+```
+
+### Scenario 3: Quality Control
+```python
+# Find low-confidence areas
+poor_zones = []
+
+for zone_name, zone_info in zone_analysis.items():
+    if zone_info['avg_confidence'] < 60:
+        poor_zones.append(zone_name)
+
+if poor_zones:
+    print(f"⚠ Low OCR quality in: {poor_zones}")
+    print(f"Consider re-scanning at higher DPI")
+```
+
+### Scenario 4: Create Searchable PDF from hOCR
+```python
+# Note: Requires additional library
+# This is pseudo-code showing the concept
+
+from pypdf import PdfWriter
+from F import process_pdf_spatial, save_hocr
+
+# Extract spatial data
+spatial = process_pdf_spatial("scan.pdf")
+
+# Generate hOCR
+save_hocr(spatial, "hocr_output")
+
+# Parse hOCR and add text layer to PDF
+for page_num, df in spatial.items():
+    write_text_layer_to_pdf(
+        "scan.pdf",
+        f"hocr_output/page_{page_num}.hocr",
+        output="scan_searchable.pdf"
+    )
+```
+
+---
+
+## hOCR HTML Structure
+
+Each hOCR file is valid HTML with this hierarchy:
+
+```html
+<html>
+  <body>
+    <div class="ocr_page">                        <!-- Entire page -->
+      <div class="ocr_carea">                      <!-- Content area (block) -->
+        <p class="ocr_par">                       <!-- Paragraph -->
+          <span class="ocr_line">                   <!-- Line of text -->
+            <span class="ocrx_word">               <!-- Individual word -->
+              text
+            </span>
+          </span>
+        </p>
+      </div>
+    </div>
+  </body>
+</html>
+```
+
+Each level has a `title` attribute with coordinates:
+- `ocr_page`: `bbox 0 0 2000 2600` (full page)
+- `ocr_carea`: `bbox x1 y1 x2 y2` (text block)
+- `ocr_line`: `bbox x1 y1 x2 y2` (line)
+- `ocrx_word`: `bbox x1 y1 x2 y2; x_size 43; x_conf 85` (word + font size + confidence)
+
+---
+
+## Confidence Score Meanings
+
+| Score | Meaning | Action |
+|-------|---------|--------|
+| 90-100 | Almost certain | ✓ Use without review |
+| 80-89 | Very likely | ✓ Safe to use |
+| 70-79 | Probably right | ◐ Light review recommended |
+| 50-69 | Uncertain | ⚠ Review before using |
+| 0-49 | Likely wrong | ✗ Ignore or manually fix |
+
+---
+
+## Files Created
+
+After running commands, you'll have:
+
+```
+document_ocr.txt              Standard extraction
+document_ocr_spatial.csv      All words + coordinates + confidence
+hocr_output/                  Directory with hOCR files
+  page_1.hocr
+  page_2.hocr
+  ...
+```
+
+---
+
+## Comparing the Approaches
+
+| Need | Use This | Command |
+|------|----------|---------|
+| Extract text | standard | `-m standard` |
+| Get word locations | spatial | `--mode spatial` |
+| Analyze structure | zones | `-m zones` |
+| Professional format | hocr | `-m hocr` |
+| Quality check | analyze | `-m analyze` |
+
+---
+
+## Integration Examples
+
+### With pandas (data analysis)
+```python
+import pandas as pd
+from F import process_pdf_spatial, extract_all_zones
+
+spatial = process_pdf_spatial("doc.pdf")
+
+for page_num, df in spatial.items():
+    # All words as DataFrame
+    print(df.groupby('line_num')['text'].apply(lambda x: ' '.join(x)))
+```
+
+### With OpenCV (image processing)
+```python
+import cv2
+from F import process_pdf_spatial, visualize_spatial_ocr
+
+spatial = process_pdf_spatial("doc.pdf")
+
+for page_num, df in spatial.items():
+    # Draw bounding boxes on image
+    image = load_page_image(page_num)
+    annotated = visualize_spatial_ocr(image, df)
+    cv2.imwrite(f"page_{page_num}_annotated.png", annotated)
+```
+
+### With BeautifulSoup (web integration)
+```python
+from bs4 import BeautifulSoup
+
+# Load hOCR as HTML
+with open("page_1.hocr") as f:
+    soup = BeautifulSoup(f, 'html.parser')
+
+# Find all words with high confidence
+high_conf = soup.find_all('span', class_='ocrx_word')
+high_conf = [w for w in high_conf if 'x_conf 8' in w.get('title')]
+
+# Extract text
+text = ' '.join([w.text for w in high_conf])
+```
+

@@ -1,0 +1,260 @@
+# Quick Reference - Spatial OCR Commands
+
+## Installation (Already Done ✓)
+```bash
+pip install pdf2image pytesseract opencv-python scipy pandas Pillow
+```
+
+System requirements:
+- ✓ Tesseract OCR (installed at C:\Program Files\Tesseract-OCR)
+- ✓ Poppler (extracted at C:\Users\wadje\Downloads\Release-25.12.0-0\poppler-25.12.0\Library\bin)
+
+---
+
+## Command Syntax
+
+```bash
+python F.py <pdf_file> [--mode <mode>] [--output <output.txt>]
+```
+
+### Basic Usage
+
+```bash
+# Standard extraction (fastest)
+python F.py "document.pdf"
+→ Creates: document_ocr.txt
+
+# Spatial extraction (with coordinates & confidence)
+python F.py "document.pdf" --mode spatial
+→ Creates: document_ocr_spatial.csv + document_ocr.txt
+
+# Analyze OCR quality
+python F.py "document.pdf" --mode analyze
+→ Shows: Confidence distribution + statistics
+
+# Custom output filename
+python F.py "document.pdf" --output "my_results.txt"
+
+# Combine options
+python F.py "document.pdf" --mode spatial --output "results.txt"
+```
+
+---
+
+## Examples
+
+### Example 1: Simple Extract
+```bash
+python F.py "C:\Users\wadje\Downloads\Resume.pdf"
+```
+Output: `Resume_ocr.txt` (plain text)
+
+### Example 2: Get Spatial Data
+```bash
+python F.py "C:\Users\wadje\Downloads\AyushWadjeResume.pdf" --mode spatial
+```
+Outputs:
+- `AyushWadjeResume_ocr_spatial.csv` (406 words with locations)
+- `AyushWadjeResume_ocr.txt` (reconstructed text)
+
+### Example 3: Analyze Quality
+```bash
+python F.py "C:\Users\wadje\Downloads\Form.pdf" --mode analyze
+```
+Output: OCR quality statistics
+
+---
+
+## Working with CSV Data
+
+### Python - Filter High Confidence Words
+```python
+import pandas as pd
+
+df = pd.read_csv("document_ocr_spatial.csv")
+high_conf = df[df['conf'] >= 80]
+
+print(f"High confidence words: {len(high_conf)}")
+print(high_conf[['text', 'conf', 'left', 'top']])
+
+# Save filtered results
+high_conf.to_csv("high_confidence.csv", index=False)
+```
+
+### Python - Find Words in Area
+```python
+import pandas as pd
+
+df = pd.read_csv("document_ocr_spatial.csv")
+
+# Words in header (top 100 pixels)
+header = df[df['top'] < 100]
+print("Header words:", ' '.join(header['text']))
+
+# Words in left column (x < 500)
+left_col = df[df['left'] < 500]
+print(f"Left column: {len(left_col)} words")
+```
+
+### Excel - Open and Filter
+1. Open the `_ocr_spatial.csv` file in Excel
+2. Apply AutoFilter (Data → Filter)
+3. Filter by `conf` column:
+   - Click arrow → Custom Filter
+   - Set: `conf >= 70`
+4. Sort by location (left → top) to read in order
+
+---
+
+## Output File Descriptions
+
+### Mode: standard
+```
+Output: document_ocr.txt
+Format: Plain text
+Content: Full text with page breaks (==== Page N ====)
+Size: Smaller, easy to read
+Use: When you just need the text
+```
+
+### Mode: spatial
+```
+Output: document_ocr_spatial.csv
+Format: CSV spreadsheet
+Columns: level, page_num, block_num, par_num, line_num, word_num, 
+         left, top, width, height, conf, text, page
+
+Rows: One row per detected word
+Example: 
+  AYUSH @ (850, 154) with 85% confidence
+  MAROTI @ (1103, 155) with 88% confidence
+  
+Use: For programmatic processing, filtering, layout analysis
+```
+
+### Mode: analyze
+```
+Output: document_ocr.txt
+Content: Confidence statistics
+Example:
+  Page 1:
+    Total words: 406
+    Avg Confidence: 37.0%
+    ≥80%: 59 words
+    50-79%: 93 words
+    <50%: 254 words
+```
+
+---
+
+## Interpreting Confidence Scores
+
+| Confidence | Meaning | Action |
+|-----------|---------|--------|
+| 90-100% | Very certain | ✓ Use as-is |
+| 80-89% | Very likely correct | ✓ Use, light review |
+| 70-79% | Probably correct | ◐ Use with caution |
+| 50-69% | Uncertain | ⚠ Review manually |
+| 0-49% | Probably wrong | ✗ Likely error/noise |
+
+---
+
+## Troubleshooting
+
+### Problem: "tesseract is not installed"
+**Solution:** Make sure Tesseract is installed at:
+```
+C:\Program Files\Tesseract-OCR
+```
+And verify tessdata folder exists
+
+### Problem: "Poppler files not found"
+**Solution:** Make sure Poppler is at:
+```
+C:\Users\wadje\Downloads\Release-25.12.0-0\poppler-25.12.0\Library\bin
+```
+
+### Problem: Low confidence scores (mostly <50%)
+**Solutions:**
+1. Increase DPI: Change `DPI = 300` to `DPI = 400` in F.py
+2. Check image quality: Is the PDF scanned at good quality?
+3. Try preprocessing-heavy documents: --mode spatial with filters
+4. Use higher resolution images if available
+
+### Problem: Deskew warning "Too few contours; skipping deskew"
+**Note:** This is normal for images without much text. Not an error.
+
+---
+
+## Performance Tips
+
+### Make it Faster
+- Use `mode=standard` (not spatial)
+- Reduce DPI: `DPI = 150` instead of 300
+- Process fewer pages: Only scan needed pages
+
+### Make it More Accurate
+- Use `mode=spatial` with confidence filter
+- Increase DPI: `DPI = 400` or higher
+- Use `--mode analyze` to identify problem areas
+- Manually fix low-confidence words
+
+### Export Data Efficiently
+```python
+# Fast: Only high-confidence words
+df = pd.read_csv("doc_ocr_spatial.csv")
+df[df['conf'] >= 70].to_csv("cleaned.csv")
+
+# Or: Filter specific area
+df[df['left'] < 1000].to_csv("left_column.csv")
+```
+
+---
+
+## Demo Script
+
+Run the comprehensive demo:
+```bash
+python spatial_ocr_demo.py
+```
+
+Shows:
+1. Spatial data extraction
+2. Confidence filtering
+3. Layout reconstruction
+4. Advanced filtering strategies
+5. CSV export
+
+---
+
+## Key Functions in F.py
+
+```python
+# Extract text
+process_pdf(pdf_path, output_path)
+
+# Extract text + spatial data
+process_pdf_spatial(pdf_path, confidence_threshold=50)
+
+# Filter by confidence
+filter_by_confidence(dataframe, threshold=70)
+
+# Reconstruct preserving layout
+reconstruct_text_from_spatial(dataframe)
+
+# Draw bounding boxes (visualization)
+visualize_spatial_ocr(image, dataframe, output_path)
+
+# Single-page processing
+ocr_image(pil_image)
+ocr_image_spatial(pil_image)
+```
+
+---
+
+## For More Help
+
+- See: `SPATIAL_OCR_GUIDE.md` (comprehensive guide)
+- See: `spatial_ocr_demo.py` (code examples)
+- Run: `python F.py` (shows usage info)
+
