@@ -1,23 +1,18 @@
 import sys
 import os
 
-# Add project root and PDF directory to sys.path
-root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-pdf_dir = os.path.join(root_dir, 'PDF')
-
+# Add project root to sys.path
+root_dir = os.path.abspath(os.path.dirname(__file__))
 if root_dir not in sys.path:
     sys.path.append(root_dir)
-if pdf_dir not in sys.path:
-    sys.path.append(pdf_dir)
 
 try:
-    from F import process_pdf
+    from lexiscan.ocr.pipeline import process_pdf
 except ImportError as e:
-    print(f"Error importing process_pdf from {pdf_dir}: {e}")
-    print("Ensure F.py exists in the PDF directory.")
+    print(f"Error importing process_pdf: {e}")
     sys.exit(1)
 
-from src.ner_model import train_ner_model, predict_ner, normalize_text
+from lexiscan.ner.model import train_ner_model, predict_ner, normalize_text
 
 def extract_entities_from_pdf(pdf_path):
     print(f"Processing PDF: {pdf_path}")
@@ -116,4 +111,4 @@ if __name__ == "__main__":
             for text, label in unique_entities:
                 print(f"  [{label}] {text}")
     else:
-        print("Usage: python src/integration.py <path_to_pdf>")
+        print("Usage: python main.py <path_to_pdf>")
