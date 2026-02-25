@@ -1,132 +1,79 @@
+#!/usr/bin/env python
+"""
+LexiScan Main Launcher
+Dispatches to CLI or REST API based on arguments.
+
+Usage:
+    python main.py extract <pdf_path>          # Run CLI extract command
+    python main.py batch <folder_path>          # Run CLI batch command
+    python main.py train --data <file>         # Run CLI train command
+    python main.py info                         # Run CLI info command
+    python main.py serve --host 0.0.0.0 --port 8000  # Run REST API
+"""
+
 import sys
 import os
+import argparse
 
-# Add project root to sys.path
-root_dir = os.path.abspath(os.path.dirname(__file__))
-if root_dir not in sys.path:
-    sys.path.append(root_dir)
 
-try:
-    from lexiscan.ocr.pipeline import process_pdf
-except ImportError as e:
-    print(f"Error importing process_pdf: {e}")
-    sys.exit(1)
+def main():
+    """Main entry point."""
+    # Add project root to sys.path
+    root_dir = os.path.abspath(os.path.dirname(__file__))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
 
-from lexiscan.ner.model import train_ner_model, predict_ner, normalize_text, save_ner_model, load_ner_model
+    # Check if first argument is "serve"
+    if len(sys.argv) > 1 and sys.argv[1] == "serve":
+        # Start REST API
+        args_dict = {}
+        
+        # Parse serve-specific arguments
+        i = 2
+        while i < len(sys.argv):
+            if sys.argv[i] == "--host" and i + 1 < len(sys.argv):
+                args_dict["host"] = sys.argv[i + 1]
+                i += 2
+            elif sys.argv[i] == "--port" and i + 1 < len(sys.argv):
+                args_dict["port"] = int(sys.argv[i + 1])
+                i += 2
+            elif sys.argv[i] == "--reload":
+                args_dict["reload"] = True
+                i += 1
+            else:
+                i += 1
+        
+        host = args_dict.get("host", "0.0.0.0")
+        port = args_dict.get("port", 8000)
+        reload = args_dict.get("reload", False)
+        
+        try:
+            import uvicorn
+            from lexiscan.api import app
 
-def extract_entities_from_pdf(pdf_path):
-    print(f"Processing PDF: {pdf_path}")
+            print(f"\n{'='*60}")
+            print("Starting LexiScan REST API")
+            print(f"{'='*60}")
+            print(f"Host: {host}")
+            print(f"Port: {port}")
+            print(f"Docs: http://{host if host != '0.0.0.0' else 'localhost'}:{port}/docs")
+            print(f"{'='*60}\n")
 
-    # Step 1: OCR
-    print("\n--- Step 1: Running OCR ---")
-    try:
-        # process_pdf returns {page_num: text}
-        ocr_results = process_pdf(pdf_path)
-    except Exception as e:
-        print(f"Error during OCR: {e}")
-        return {}
+            uvicorn.run(
+                "lexiscan.api:app",
+                host=host,
+                port=port,
+                reload=reload,
+            )
+        except ImportError as e:
+            print(f"Error: FastAPI/Uvicorn not installed: {e}")
+            print("Install with: pip install fastapi uvicorn")
+            sys.exit(1)
+    else:
+        # Delegate to CLI for all other commands
+        from lexiscan.cli import main as cli_main
+        cli_main()
 
-    if not ocr_results:
-        print("No text extracted from PDF.")
-        return {}
-
-    print(f"OCR extracted text from {len(ocr_results)} pages.")
-
-    # Step 2: NER Model
-    print("\n--- Step 2: Loading/Training NER model ---")
-    MODEL_PATH = "ner_model_weights.h5"
-    VOCAB_PATH = "vocab.json"
-
-    try:
-        if os.path.exists(MODEL_PATH) and os.path.exists(VOCAB_PATH):
-            print(f"Loading existing model from {MODEL_PATH}...")
-            model, token2idx = load_ner_model(MODEL_PATH, VOCAB_PATH)
-        else:
-            print("Training NER model (Mock Training)...")
-            # Use fewer epochs for demo purposes
-            model, token2idx = train_ner_model(epochs=1)
-            save_ner_model(model, token2idx, MODEL_PATH, VOCAB_PATH)
-    except Exception as e:
-        print(f"Error with NER model: {e}")
-        return {}
-
-    extracted_entities = {}
-
-    print("\n--- Step 3: Extracting Entities ---")
-
-    # Download nltk data if not already present
-    import nltk
-    try:
-        nltk.data.find('tokenizers/punkt_tab')
-    except LookupError:
-        nltk.download('punkt_tab', quiet=True)
-        nltk.download('punkt', quiet=True)
-
-    for page_num, text in ocr_results.items():
-        print(f"Analyzing page {page_num}...")
-
-        # Split by sentences using NLTK for better handling of abbreviations etc.
-        sentences = nltk.sent_tokenize(text)
-        page_entities = []
-
-        for sentence in sentences:
-            if not sentence.strip():
-                continue
-
-            normalized_sent = normalize_text(sentence)
-            if not normalized_sent:
-                continue
-
-            # Predict
-            # Note: Max length in model is 20, so long sentences will be truncated
-            predictions = predict_ner(normalized_sent, model, token2idx)
-
-            # Extract entities from BIO tags
-            current_entity = []
-            current_tag = None
-
-            for token, tag in predictions:
-                if tag.startswith("B-"):
-                    if current_entity:
-                        page_entities.append((" ".join(current_entity), current_tag))
-                    current_entity = [token]
-                    current_tag = tag[2:]
-                elif tag.startswith("I-") and current_tag == tag[2:]:
-                    current_entity.append(token)
-                else:
-                    if current_entity:
-                        page_entities.append((" ".join(current_entity), current_tag))
-                    current_entity = []
-                    current_tag = None
-
-            if current_entity:
-                 page_entities.append((" ".join(current_entity), current_tag))
-
-        extracted_entities[page_num] = page_entities
-
-    return extracted_entities
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        pdf_path = sys.argv[1]
-        if not os.path.exists(pdf_path):
-            print(f"File not found: {pdf_path}")
-            sys.exit(1)
-
-        results = extract_entities_from_pdf(pdf_path)
-
-        print("\n" + "="*50)
-        print("FINAL EXTRACTION RESULTS")
-        print("="*50)
-
-        for page, entities in results.items():
-            print(f"\nPage {page}:")
-            if not entities:
-                print("  (No entities found)")
-
-            # Dedup within page
-            unique_entities = sorted(list(set(entities)))
-            for text, label in unique_entities:
-                print(f"  [{label}] {text}")
-    else:
-        print("Usage: python main.py <path_to_pdf>")
+    main()

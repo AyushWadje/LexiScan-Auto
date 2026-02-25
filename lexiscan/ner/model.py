@@ -1,11 +1,24 @@
 
 import numpy as np
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import LSTM, Bidirectional, Dense, Embedding, Dropout, Input, TimeDistributed
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-from tensorflow.keras.callbacks import Callback, ReduceLROnPlateau
+try:
+    import tensorflow as tf
+    from tensorflow import keras
+    from tensorflow.keras.models import Model
+    from tensorflow.keras.layers import LSTM, Bidirectional, Dense, Embedding, Dropout, Input, TimeDistributed
+    from tensorflow.keras.preprocessing.sequence import pad_sequences
+    from tensorflow.keras.callbacks import Callback, ReduceLROnPlateau
+    TENSORFLOW_AVAILABLE = True
+except ImportError:
+    TENSORFLOW_AVAILABLE = False
+    print("Warning: TensorFlow not available. NER model training/inference will not work.")
+    print("Install with: pip install tensorflow")
+    # Create dummy types so imports don't fail
+    class DummyCallback:
+        pass
+    Callback = DummyCallback
+    tf = None
+    keras = None
+
 from sklearn.metrics import f1_score
 import os
 import re
@@ -17,7 +30,8 @@ warnings.filterwarnings('ignore')
 # Set seed for reproducibility
 SEED = 42
 np.random.seed(SEED)
-tf.random.set_seed(SEED)
+if TENSORFLOW_AVAILABLE and tf is not None:
+    tf.random.set_seed(SEED)
 
 # BIO Tags
 BIO_TAGS = ['O', 'B-DATE', 'I-DATE', 'B-MONEY', 'I-MONEY']

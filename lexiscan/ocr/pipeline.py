@@ -24,8 +24,20 @@ if os.name == 'nt':
 
     # Add Tesseract and Poppler to PATH if likely locations exist
     tesseract_path = r'C:\Program Files\Tesseract-OCR'
+    
     # Check for Poppler in common locations or environment variable
     poppler_path = os.environ.get('POPPLER_PATH')
+    if not poppler_path:
+        # Check common Poppler installation locations
+        common_poppler_locations = [
+            r'C:\poppler\poppler-25.12.0\Library\bin',
+            r'C:\Program Files\poppler\Library\bin',
+            r'C:\Program Files (x86)\poppler\Library\bin',
+        ]
+        for loc in common_poppler_locations:
+            if os.path.exists(loc):
+                poppler_path = loc
+                break
 
     new_path = os.environ['PATH']
     if os.path.exists(tesseract_path) and tesseract_path not in new_path:
@@ -42,6 +54,24 @@ if os.name == 'nt':
     tesseract_exe = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
     if os.path.exists(tesseract_exe):
         pytesseract.pytesseract.pytesseract_cmd = tesseract_exe
+
+# Get Poppler path for pdf2image
+POPPLER_PATH = None
+if os.name == 'nt':
+    poppler_env = os.environ.get('POPPLER_PATH')
+    if poppler_env and os.path.exists(poppler_env):
+        POPPLER_PATH = poppler_env
+    else:
+        # Check common Poppler installation locations
+        common_poppler_locations = [
+            r'C:\poppler\poppler-25.12.0\Library\bin',
+            r'C:\Program Files\poppler\Library\bin',
+            r'C:\Program Files (x86)\poppler\Library\bin',
+        ]
+        for loc in common_poppler_locations:
+            if os.path.exists(loc):
+                POPPLER_PATH = loc
+                break
 
 import cv2
 import numpy as np
@@ -70,7 +100,10 @@ LANG = "eng"       # Tesseract language pack(s), e.g. "eng+fra" for multi-langua
 def get_page_count(pdf_path: str) -> int:
     """Return total page count without loading the whole PDF into RAM."""
     from pdf2image.pdf2image import pdfinfo_from_path
-    info = pdfinfo_from_path(pdf_path)
+    kwargs = {}
+    if POPPLER_PATH:
+        kwargs['poppler_path'] = POPPLER_PATH
+    info = pdfinfo_from_path(pdf_path, **kwargs)
     return info["Pages"]
 
 
@@ -81,13 +114,16 @@ def convert_page(pdf_path: str, page_number: int):
     page_number is 1-indexed (Poppler convention).
     Returns a PIL Image in grayscale (or RGB if GRAYSCALE=False).
     """
-    images = convert_from_path(
-        pdf_path,
-        dpi=DPI,
-        first_page=page_number,
-        last_page=page_number,   # Load exactly one page — key to memory safety
-        grayscale=GRAYSCALE,
-    )
+    kwargs = {
+        'dpi': DPI,
+        'first_page': page_number,
+        'last_page': page_number,   # Load exactly one page — key to memory safety
+        'grayscale': GRAYSCALE,
+    }
+    if POPPLER_PATH:
+        kwargs['poppler_path'] = POPPLER_PATH
+    
+    images = convert_from_path(pdf_path, **kwargs)
     return images[0]  # Always a list; we asked for one page so grab index 0
 
 
@@ -480,11 +516,15 @@ def process_pdf_adaptive_dpi(pdf_path: str) -> dict[int, str]:
             del image
             gc.collect()
             # Re-render at higher resolution
-            images = convert_from_path(
-                pdf_path, dpi=400,
-                first_page=page_num, last_page=page_num,
-                grayscale=GRAYSCALE,
-            )
+            kwargs = {
+                'dpi': 400,
+                'first_page': page_num, 
+                'last_page': page_num,
+                'grayscale': GRAYSCALE,
+            }
+            if POPPLER_PATH:
+                kwargs['poppler_path'] = POPPLER_PATH
+            images = convert_from_path(pdf_path, **kwargs)
             image = images[0]
         else:
             log.info("  Page %d: standard DPI OK", page_num)
