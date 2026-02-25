@@ -90,7 +90,7 @@ SAMPLE_DATA = [
     (['This', 'is', 'binding'], ['O', 'O', 'O']),
 ]
 
-MAX_SEQ_LENGTH = 20
+MAX_SEQ_LENGTH = 128
 
 # GloVe Download and Load
 def load_glove_embeddings(embedding_dim=100):
@@ -136,7 +136,7 @@ def tokenize_text(text):
     """Simple whitespace tokenization."""
     return text.split()
 
-def prepare_sequences(data, token2idx, tag2idx, max_length=20):
+def prepare_sequences(data, token2idx, tag2idx, max_length=MAX_SEQ_LENGTH):
     X, y = [], []
     for tokens, tags in data:
         token_ids = [token2idx.get(token, token2idx['<UNK>']) for token in tokens]
@@ -248,7 +248,17 @@ def build_sample_weights(y_padded, class_weights):
         weights[y_padded == tag_idx] = weight
     return weights
 
-def train_ner_model(sample_data=SAMPLE_DATA, epochs=5):
+def train_ner_model(data_path=None, epochs=5):
+    if data_path and os.path.exists(data_path):
+        import json
+        with open(data_path) as f:
+            raw = json.load(f)
+        sample_data = [(item['tokens'], item['tags']) for item in raw]
+        print(f"Loaded {len(sample_data)} training examples from {data_path}")
+    else:
+        sample_data = SAMPLE_DATA
+        print("Using built-in sample data (60 examples)")
+
     print("Preparing data...")
     token2idx = build_vocabulary(sample_data)
     vocab_size = len(token2idx)
@@ -325,7 +335,7 @@ def load_ner_model(filepath='ner_model_weights.h5', vocab_path='vocab.json'):
     print(f"Model loaded from {filepath}")
     return model, token2idx
 
-def predict_ner(text, model, token2idx, max_length=20, threshold=0.5):
+def predict_ner(text, model, token2idx, max_length=MAX_SEQ_LENGTH, threshold=0.5):
     tokens = text.split()
     token_ids = [token2idx.get(token, token2idx['<UNK>']) for token in tokens]
 

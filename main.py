@@ -53,11 +53,20 @@ def extract_entities_from_pdf(pdf_path):
     extracted_entities = {}
 
     print("\n--- Step 3: Extracting Entities ---")
+
+    # Download nltk data if not already present
+    import nltk
+    try:
+        nltk.data.find('tokenizers/punkt_tab')
+    except LookupError:
+        nltk.download('punkt_tab', quiet=True)
+        nltk.download('punkt', quiet=True)
+
     for page_num, text in ocr_results.items():
         print(f"Analyzing page {page_num}...")
 
-        # Split by periods to approximate sentences, as NER works best on sentence level
-        sentences = text.split('.')
+        # Split by sentences using NLTK for better handling of abbreviations etc.
+        sentences = nltk.sent_tokenize(text)
         page_entities = []
 
         for sentence in sentences:
