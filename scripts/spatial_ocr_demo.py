@@ -9,11 +9,16 @@ This demonstrates:
 """
 
 import sys
-sys.path.insert(0, r"C:\Users\wadje\OneDrive\Pictures\PDF")
+import os
+
+# Add project root to sys.path
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
 
 from pathlib import Path
 import pandas as pd
-from F import (
+from lexiscan.ocr.pipeline import (
     process_pdf_spatial,
     filter_by_confidence,
     reconstruct_text_from_spatial,

@@ -1,23 +1,18 @@
 import sys
 import os
 
-# Add project root and PDF directory to sys.path
-root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-pdf_dir = os.path.join(root_dir, 'PDF')
-
+# Add project root to sys.path
+root_dir = os.path.abspath(os.path.dirname(__file__))
 if root_dir not in sys.path:
     sys.path.append(root_dir)
-if pdf_dir not in sys.path:
-    sys.path.append(pdf_dir)
 
 try:
-    from F import process_pdf
+    from lexiscan.ocr.pipeline import process_pdf
 except ImportError as e:
-    print(f"Error importing process_pdf from {pdf_dir}: {e}")
-    print("Ensure F.py exists in the PDF directory.")
+    print(f"Error importing process_pdf: {e}")
     sys.exit(1)
 
-from src.ner_model import train_ner_model, predict_ner, normalize_text
+from lexiscan.ner.model import train_ner_model, predict_ner, normalize_text, save_ner_model, load_ner_model
 
 def extract_entities_from_pdf(pdf_path):
     print(f"Processing PDF: {pdf_path}")
@@ -37,23 +32,41 @@ def extract_entities_from_pdf(pdf_path):
 
     print(f"OCR extracted text from {len(ocr_results)} pages.")
 
-    # Step 2: NER Model (Train on sample data for now since we don't have weights)
-    print("\n--- Step 2: Training NER model (Mock Training) ---")
+    # Step 2: NER Model
+    print("\n--- Step 2: Loading/Training NER model ---")
+    MODEL_PATH = "ner_model_weights.h5"
+    VOCAB_PATH = "vocab.json"
+
     try:
-        # Use fewer epochs for demo purposes
-        model, token2idx = train_ner_model(epochs=1)
+        if os.path.exists(MODEL_PATH) and os.path.exists(VOCAB_PATH):
+            print(f"Loading existing model from {MODEL_PATH}...")
+            model, token2idx = load_ner_model(MODEL_PATH, VOCAB_PATH)
+        else:
+            print("Training NER model (Mock Training)...")
+            # Use fewer epochs for demo purposes
+            model, token2idx = train_ner_model(epochs=1)
+            save_ner_model(model, token2idx, MODEL_PATH, VOCAB_PATH)
     except Exception as e:
-        print(f"Error training NER model: {e}")
+        print(f"Error with NER model: {e}")
         return {}
 
     extracted_entities = {}
 
     print("\n--- Step 3: Extracting Entities ---")
+
+    # Download nltk data if not already present
+    import nltk
+    try:
+        nltk.data.find('tokenizers/punkt_tab')
+    except LookupError:
+        nltk.download('punkt_tab', quiet=True)
+        nltk.download('punkt', quiet=True)
+
     for page_num, text in ocr_results.items():
         print(f"Analyzing page {page_num}...")
 
-        # Split by periods to approximate sentences, as NER works best on sentence level
-        sentences = text.split('.')
+        # Split by sentences using NLTK for better handling of abbreviations etc.
+        sentences = nltk.sent_tokenize(text)
         page_entities = []
 
         for sentence in sentences:
@@ -116,4 +129,4 @@ if __name__ == "__main__":
             for text, label in unique_entities:
                 print(f"  [{label}] {text}")
     else:
-        print("Usage: python src/integration.py <path_to_pdf>")
+        print("Usage: python main.py <path_to_pdf>")
