@@ -314,6 +314,17 @@ def save_ner_model(model, token2idx, filepath='ner_model_weights.h5', vocab_path
         json.dump(token2idx, f)
     print(f"Model saved to {filepath}, vocab to {vocab_path}")
 
+def load_ner_model(filepath='ner_model_weights.h5', vocab_path='vocab.json'):
+    import json
+    with open(vocab_path, 'r') as f:
+        token2idx = json.load(f)
+    vocab_size = len(token2idx)
+    embedding_matrix = np.random.normal(0, 0.1, (vocab_size, 100)).astype(np.float32)
+    model = build_improved_bilstm(vocab_size, 100, embedding_matrix, 64, len(BIO_TAGS), MAX_SEQ_LENGTH)
+    model.load_weights(filepath)
+    print(f"Model loaded from {filepath}")
+    return model, token2idx
+
 def predict_ner(text, model, token2idx, max_length=20, threshold=0.5):
     tokens = text.split()
     token_ids = [token2idx.get(token, token2idx['<UNK>']) for token in tokens]

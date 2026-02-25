@@ -12,7 +12,7 @@ except ImportError as e:
     print(f"Error importing process_pdf: {e}")
     sys.exit(1)
 
-from lexiscan.ner.model import train_ner_model, predict_ner, normalize_text
+from lexiscan.ner.model import train_ner_model, predict_ner, normalize_text, save_ner_model, load_ner_model
 
 def extract_entities_from_pdf(pdf_path):
     print(f"Processing PDF: {pdf_path}")
@@ -32,13 +32,22 @@ def extract_entities_from_pdf(pdf_path):
 
     print(f"OCR extracted text from {len(ocr_results)} pages.")
 
-    # Step 2: NER Model (Train on sample data for now since we don't have weights)
-    print("\n--- Step 2: Training NER model (Mock Training) ---")
+    # Step 2: NER Model
+    print("\n--- Step 2: Loading/Training NER model ---")
+    MODEL_PATH = "ner_model_weights.h5"
+    VOCAB_PATH = "vocab.json"
+
     try:
-        # Use fewer epochs for demo purposes
-        model, token2idx = train_ner_model(epochs=1)
+        if os.path.exists(MODEL_PATH) and os.path.exists(VOCAB_PATH):
+            print(f"Loading existing model from {MODEL_PATH}...")
+            model, token2idx = load_ner_model(MODEL_PATH, VOCAB_PATH)
+        else:
+            print("Training NER model (Mock Training)...")
+            # Use fewer epochs for demo purposes
+            model, token2idx = train_ner_model(epochs=1)
+            save_ner_model(model, token2idx, MODEL_PATH, VOCAB_PATH)
     except Exception as e:
-        print(f"Error training NER model: {e}")
+        print(f"Error with NER model: {e}")
         return {}
 
     extracted_entities = {}

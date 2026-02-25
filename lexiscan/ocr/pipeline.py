@@ -245,6 +245,8 @@ def pil_to_cv2(pil_image):
 
 def cv2_to_pil(cv2_image):
     """Convert OpenCV image (BGR) back to PIL Image."""
+    if len(cv2_image.shape) == 2:  # grayscale, no channel conversion needed
+        return Image.fromarray(cv2_image)
     # Convert BGR to RGB
     rgb_image = cv2.cvtColor(cv2_image, cv2.COLOR_BGR2RGB)
     # Convert numpy array to PIL Image
