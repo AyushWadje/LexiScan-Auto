@@ -17,11 +17,31 @@ import os
 import sys
 
 # Set environment variables BEFORE importing pytesseract
-os.environ['TESSDATA_PREFIX'] = r'C:\Program Files\Tesseract-OCR\tessdata'
-os.environ['PATH'] = r'C:\Program Files\Tesseract-OCR;' + r'C:\Users\wadje\Downloads\Release-25.12.0-0\poppler-25.12.0\Library\bin' + os.pathsep + os.environ['PATH']
+if os.name == 'nt':
+    # Windows specific paths - can be overridden by environment variables
+    if 'TESSDATA_PREFIX' not in os.environ:
+        os.environ['TESSDATA_PREFIX'] = r'C:\Program Files\Tesseract-OCR\tessdata'
+
+    # Add Tesseract and Poppler to PATH if likely locations exist
+    tesseract_path = r'C:\Program Files\Tesseract-OCR'
+    # Check for Poppler in common locations or environment variable
+    poppler_path = os.environ.get('POPPLER_PATH')
+
+    new_path = os.environ['PATH']
+    if os.path.exists(tesseract_path) and tesseract_path not in new_path:
+        new_path = tesseract_path + os.pathsep + new_path
+    if poppler_path and os.path.exists(poppler_path) and poppler_path not in new_path:
+        new_path = poppler_path + os.pathsep + new_path
+
+    os.environ['PATH'] = new_path
 
 import pytesseract
-pytesseract.pytesseract.pytesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
+if os.name == 'nt':
+    # Only set explicit command path on Windows if not already set
+    tesseract_exe = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    if os.path.exists(tesseract_exe):
+        pytesseract.pytesseract.pytesseract_cmd = tesseract_exe
 
 import cv2
 import numpy as np
